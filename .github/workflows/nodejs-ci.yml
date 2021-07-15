@@ -13,4 +13,6 @@ jobs:
         with:
           node-version: '14.x'
       - run: npm ci
-      - run: export DISPLAY=:1.0; npm test
+      - uses: GabrielBB/xvfb-action@v1
+        with:
+          run: npm test
