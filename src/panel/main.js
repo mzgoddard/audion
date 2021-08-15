@@ -1,3 +1,4 @@
+/// <reference path="../chrome/DebuggerWebAudioDomain.js" />
 /// <reference path="../devtools/Types.js" />
 
 import * as PIXI from 'pixi.js';
@@ -7,7 +8,7 @@ import {install} from '@pixi/unsafe-eval';
 import {chrome} from '../chrome';
 import {Observer} from '../utils/Observer';
 import {Camera} from './Camera';
-import {colorFromNodeType} from './graphStyle';
+import {Color, colorFromNodeType} from './graphStyle';
 
 install(PIXI);
 
@@ -28,9 +29,9 @@ const createNodeRenderObserver = Observer.transform(
     if (message.graph) {
       message.graph.nodes.forEach(({v: nodeId, value: node}) => {
         if (node) {
-          const nodeRender = createNodeRender(nodeId, node);
-          node.width = nodeRender.getLocalBounds().width;
-          node.height = nodeRender.getLocalBounds().height;
+          const nodeRender = createNodeRender(nodeId, message.nodes[nodeId]);
+          node.width = nodeRender.size.x;
+          node.height = nodeRender.size.y;
         }
       });
     }
@@ -255,41 +256,195 @@ cam.viewportObserver.observe((viewport) => {
   }
 });
 
-/** @type {Map<string, PIXI.Container>} */
+/** @type {Map<string, AudioNodeRender>} */
 const nodeMap = new Map();
 /** @type {Map<string, PIXI.Graphics>} */
 const edgeMap = new Map();
 
 /**
+ * Manage the rendered representation of a WebAudio node.
+ */
+class AudioNodeRender {
+  /**
+   * Create a AudioNodeRender instance.
+   * @param {string} id
+   */
+  constructor(id) {
+    /** @type {string} */
+    this.id = id;
+    /** @type {Audion.GraphNode} */
+    this.node = null;
+    /** @type {PIXI.Container} */
+    this.parent = null;
+    /** @type {PIXI.Container} */
+    this.container = null;
+    /** @type {PIXI.Text} */
+    this.title = null;
+    /** @type {PIXI.Container} */
+    this.labelContainer = null;
+    /** @type {PIXI.Graphics} */
+    this.background = null;
+    /** @type {PIXI.Point} */
+    this.size = new PIXI.Point();
+    /** @type {PIXI.Point} */
+    this.position = null;
+    /** @type {Array<PIXI.Point>} */
+    this.inputOffset = [];
+    /** @type {Array<PIXI.Point>} */
+    this.outputOffset = [];
+    /** @type {Object<string, PIXI.Point>} */
+    this.paramOffset = {};
+  }
+  static get INPUT_HEIGHT() {
+    return 30;
+  }
+  static get INPUT_RADIUS() {
+    return 10;
+  }
+  static get PARAM_HEIGHT() {
+    return 20;
+  }
+  static get PARAM_RADIUS() {
+    return 8;
+  }
+  /**
+   * @param {Audion.GraphNode} node
+   * @return {AudioNodeRender}
+   */
+  init(node) {
+    if (
+      this.node &&
+      node.params.length === Object.keys(this.paramOffset).length
+    ) {
+      return this;
+    }
+
+    this.node = node;
+
+    const container = (this.container = new PIXI.Container());
+    this.position = container.position;
+
+    const title = (this.title = new PIXI.Text(node.node.nodeType, {
+      fill: Color.TEXT,
+    }));
+    const background = (this.background = new PIXI.Graphics());
+    const labelContainer = (this.labelContainer = new PIXI.Container());
+    container.addChild(background);
+    container.addChild(labelContainer);
+    container.addChild(title);
+
+    this.draw();
+
+    return this;
+  }
+  /**
+   * @param {PIXI.Container} parent
+   */
+  setPixiParent(parent) {
+    this.parent = parent;
+    parent.addChild(this.container);
+  }
+  /**
+   * Remove from the rendering hierarchy.
+   */
+  remove() {
+    this.container.parent.removeChild(this.container);
+  }
+  /**
+   * Update the rendering.
+   */
+  draw() {
+    const {background, node, title} = this;
+    const localBounds = new PIXI.Rectangle();
+
+    this.inputOffset = [];
+    this.outputOffset = [];
+    this.paramOffset = {};
+
+    this.labelContainer.removeChildren();
+
+    const maxParamTextSize = new PIXI.Point();
+    for (let i = 0; i < node.params.length; i++) {
+      const param = node.params[i];
+
+      const label = new PIXI.Text(param.paramType);
+      this.labelContainer.addChild(label);
+      label.getLocalBounds(localBounds);
+      maxParamTextSize.x = Math.max(maxParamTextSize.x, localBounds.width);
+      maxParamTextSize.y = Math.max(maxParamTextSize.y, localBounds.height);
+    }
+
+    title.getLocalBounds(localBounds);
+
+    this.size.set(
+      Math.max(localBounds.width, maxParamTextSize.x) + 30,
+      localBounds.height +
+        15 +
+        Math.max(
+          AudioNodeRender.INPUT_HEIGHT * node.node.numberOfInputs +
+            AudioNodeRender.PARAM_HEIGHT * node.params.length,
+          AudioNodeRender.INPUT_HEIGHT * node.node.numberOfOutputs,
+        ),
+    );
+
+    background.clear();
+    background.lineStyle(0);
+    background.beginFill(colorFromNodeType(node.node.nodeType));
+    background.drawRoundedRect(0, 0, this.size.x, this.size.y, 3);
+    background.endFill();
+
+    for (let i = 0; i < node.node.numberOfInputs; i++) {
+      const point = (this.inputOffset[i] = new PIXI.Point(
+        0,
+        i * AudioNodeRender.INPUT_HEIGHT,
+      ));
+      background.lineStyle(3, Color.INPUT_OUTPUT);
+      background.beginFill(0xffffff);
+      background.drawCircle(point.x, point.y, AudioNodeRender.INPUT_RADIUS);
+      background.endFill();
+    }
+
+    for (let i = 0; i < node.node.numberOfOutputs; i++) {
+      const point = (this.outputOffset[i] = new PIXI.Point(
+        this.size.x,
+        i * AudioNodeRender.INPUT_HEIGHT,
+      ));
+      background.lineStyle(3, Color.INPUT_OUTPUT);
+      background.beginFill(0xffffff);
+      background.drawCircle(point.x, point.y, AudioNodeRender.INPUT_RADIUS);
+      background.endFill();
+    }
+
+    for (let i = 0; i < node.params.length; i++) {
+      const param = node.params[i];
+      const point = (this.paramOffset[param.paramId] = new PIXI.Point(
+        0,
+        node.node.numberOfInputs * AudioNodeRender.INPUT_HEIGHT +
+          i * AudioNodeRender.INPUT_HEIGHT,
+      ));
+      background.lineStyle(3, Color.AUDIO_PARAM);
+      background.beginFill(0xffffff);
+      background.drawCircle(point.x, point.y, AudioNodeRender.PARAM_RADIUS);
+      background.endFill();
+
+      const label = this.labelContainer.getChildAt(i);
+      label.position.set(15, point.y);
+    }
+  }
+}
+
+/**
  * Create the rendering for an audio node.
- * @param {*} nodeId
- * @param {*} node
- * @return {PIXI.DisplayObject}
+ * @param {string} nodeId
+ * @param {Audion.GraphNode} node
+ * @return {AudioNodeRender}
  */
 function createNodeRender(nodeId, node) {
   let nodeRender = nodeMap.get(nodeId);
   if (!nodeRender) {
-    if (node.type) {
-      nodeRender = new PIXI.Container();
-      app.stage.addChild(nodeRender);
-
-      const nodeTitle = new PIXI.Text(node.label);
-      nodeTitle.setTransform(15, 5);
-
-      const nodeBackground = new PIXI.Graphics();
-      nodeRender.addChild(nodeBackground);
-      nodeBackground.beginFill(colorFromNodeType(node.type));
-      nodeBackground.drawRoundedRect(
-        0,
-        0,
-        nodeTitle.getBounds().width + 30,
-        nodeTitle.getBounds().height + 15,
-        3,
-      );
-      nodeBackground.endFill();
-
-      nodeRender.addChild(nodeTitle);
-
+    if (node.node && node.node.nodeType) {
+      nodeRender = new AudioNodeRender(nodeId).init(node);
+      nodeRender.setPixiParent(app.stage);
       nodeMap.set(nodeId, nodeRender);
     }
   }
@@ -303,7 +458,7 @@ function createNodeRender(nodeId, node) {
 function destroyNodeRender(nodeId) {
   const nodeRender = nodeMap.get(nodeId);
   if (nodeRender) {
-    nodeRender.parent.removeChild(nodeRender);
+    nodeRender.remove();
     nodeMap.delete(nodeId);
   }
 }
@@ -344,10 +499,10 @@ layoutObserver.observe((message) => {
     const node = nodeKeyValue.value;
 
     if (node) {
-      const nodeRender = createNodeRender(nodeId, node);
-      nodeRender.setTransform(
-        node.x - nodeRender.getLocalBounds().width / 2,
-        node.y - nodeRender.getLocalBounds().height / 2,
+      const nodeRender = createNodeRender(nodeId, message.nodes[nodeId]);
+      nodeRender.position.set(
+        node.x - nodeRender.size.x / 2,
+        node.y - nodeRender.size.y / 2,
       );
     } else {
       destroyNodeRender(nodeId);

@@ -44,7 +44,7 @@
   },
   "scripts": {
     "build:chrome-extension": "node src/build/make-chrome-extension.js",
-    "build:webpack": "webpack --mode production --config src/webpack.config.js",
+    "build:webpack": "webpack --mode development --config src/webpack.config.js",
     "build": "npm run build:webpack && npm run build:chrome-extension",
     "postinstall": "husky install",
     "postpublish": "pinst --enable",

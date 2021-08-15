@@ -19,6 +19,7 @@
 /**
  * @typedef Audion.GraphNode
  * @property {ChromeDebuggerWebAudioDomain.AudioNode} node
+ * @property {Array<ChromeDebuggerWebAudioDomain.AudioParam>} params
  * @property {Array<ChromeDebuggerWebAudioDomain.NodesConnectedEvent>} edges
  */
 

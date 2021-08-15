@@ -37,6 +37,7 @@ export class WebAudioGraphIntegrator extends Observer {
    * @param {Audion.WebAudioEvent} message
    */
   _onMessage(onNext, message) {
+    console.log(message.method, message.params);
     switch (message.method) {
       case ChromeDebuggerWebAudioDomain.Events.audioNodeCreated:
         {
@@ -47,6 +48,7 @@ export class WebAudioGraphIntegrator extends Observer {
           const context = this.contexts[audioNodeCreated.node.contextId];
           context.nodes[audioNodeCreated.node.nodeId] = {
             node: audioNodeCreated.node,
+            params: [],
             edges: [],
           };
           const {nodeId} = audioNodeCreated.node;
@@ -70,6 +72,36 @@ export class WebAudioGraphIntegrator extends Observer {
           context.graph.removeNode(audioNodeDestroyed.nodeId);
           delete context.nodes[audioNodeDestroyed.nodeId];
           onNext(context);
+        }
+        break;
+      case ChromeDebuggerWebAudioDomain.Events.audioParamCreated:
+        {
+          /** @type {ChromeDebuggerWebAudioDomain.AudioParamCreatedEvent} */
+          const audioParamCreated = message.params;
+          const context = this.contexts[audioParamCreated.param.contextId];
+          context.nodes[audioParamCreated.param.nodeId].params.push(
+            audioParamCreated.param,
+          );
+        }
+        break;
+      case ChromeDebuggerWebAudioDomain.Events.audioParamWillBeDestroyed:
+        {
+          /**
+           * @type {
+           *   ChromeDebuggerWebAudioDomain.AudioParamWillBeDestroyedEvent
+           * }
+           */
+          const audioParamWillBeDestroyed = message.params;
+          const context = this.contexts[audioParamWillBeDestroyed.contextId];
+          const node = context.nodes[audioParamWillBeDestroyed.nodeId];
+          if (node) {
+            const index = node.params.findIndex(
+              ({paramId}) => paramId === audioParamWillBeDestroyed.paramId,
+            );
+            if (index >= 0) {
+              node.params.splice(index, 1);
+            }
+          }
         }
         break;
       case ChromeDebuggerWebAudioDomain.Events.contextChanged:
