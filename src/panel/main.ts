@@ -28,6 +28,7 @@ import {renderSelectGraph} from './components/selectGraph';
 import {renderDetailPanel} from './components/detailPanel';
 import {chrome} from '../chrome';
 import {renderCollectGarbage} from './components/collectGarbage';
+import {renderDebugBar} from './components/debugBar';
 
 // Install an alternate system to part of pixi.js rendering that does not use
 // new Function.
@@ -154,7 +155,11 @@ graphRender.start();
 merge(
   renderCollectGarbage(querySelector('.toolbar-garbage-button')).pipe(
     tap((action) => {
-      if (action && 'type' in action && action.type === 'collectGarbage') {
+      if (
+        action &&
+        'type' in action &&
+        action.type === Audion.DevtoolsRequestType.COLLECT_GARBAGE
+      ) {
         devtoolsRequestSubject$.next(action);
       }
     }),
@@ -170,6 +175,21 @@ merge(
     tap((action) => {
       if (action && 'type' in action && action.type === 'selectGraph') {
         graphSelector.select(action.graphId);
+      }
+    }),
+    filter(isHTMLElement),
+  ),
+  renderDebugBar(
+    querySelector('.web-audio-debug'),
+    graphSelector.graphObserver$,
+  ).pipe(
+    tap((action) => {
+      if (
+        action &&
+        'type' in action &&
+        action.type === Audion.DebugActionType.UPDATE
+      ) {
+        devtoolsRequestSubject$.next(action);
       }
     }),
     filter(isHTMLElement),

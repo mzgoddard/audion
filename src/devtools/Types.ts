@@ -43,6 +43,22 @@ export namespace Audion {
 
   export type DevtoolsMessage = GraphContextMessage | AllGraphsMessage;
 
+  export enum DebugActionType {
+    COPY = 'debugCopyAction',
+    UPDATE = 'debugUpdateAction',
+  }
+
+  export interface DebugCopyContextAction {
+    type: DebugActionType.COPY;
+  }
+
+  export interface DebugUpdateContextAction {
+    type: DebugActionType.UPDATE;
+    graphContext: Audion.GraphContext;
+  }
+
+  export type DebugAction = DebugCopyContextAction | DebugUpdateContextAction;
+
   export enum DevtoolsRequestType {
     COLLECT_GARBAGE = 'collectGarbage',
   }
@@ -51,7 +67,7 @@ export namespace Audion {
     type: DevtoolsRequestType.COLLECT_GARBAGE;
   }
 
-  export type DevtoolsRequest = DevtoolsCollectGarbageRequest;
+  export type DevtoolsRequest = DebugAction | DevtoolsCollectGarbageRequest;
 
   export interface DevtoolsObserver extends Utils.Observer<DevtoolsMessage> {}
 
